@@ -7,6 +7,14 @@ import os
 class DatasetCatalog(object):
     DATA_DIR = "datasets"
     DATASETS = {
+        "ilsvrc_train": {
+            "img_dir": "ilsvrc/train",
+            "ann_file": "ilsvrc/train/annotation"
+        },
+        "ilsvrc_val": {
+            "img_dir": "ilsvrc/val",
+            "ann_file": "ilsvrc/val/annotation"
+        },
         "coco_2017_train": {
             "img_dir": "coco/train2017",
             "ann_file": "coco/annotations/instances_train2017.json"
@@ -128,6 +136,15 @@ class DatasetCatalog(object):
             )
             return dict(
                 factory="PascalVOCDataset",
+                args=args,
+            )
+        elif "ilsvrc" in name:
+            data_dir = DatasetCatalog.DATA_DIR
+            attrs = DatasetCatalog.DATASETS[name]
+            args = dict(
+            )
+            return dict(
+                factory="WeakImageNetDataset",
                 args=args,
             )
         raise RuntimeError("Dataset not available: {}".format(name))
