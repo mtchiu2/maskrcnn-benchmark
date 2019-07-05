@@ -24,7 +24,7 @@ def seg2bbox(seg):
     py, px = np.where(seg == 1)
     return np.array([px.min(), py.min(), px.max(), py.max()])
 
-class WeakImageNetDataset(Dataset):
+class WeakImageNetTrainDataset(Dataset):
     def __init__(self, transforms=None):
         super().__init__()
 
@@ -187,3 +187,98 @@ class WeakImageNetDataset(Dataset):
 
     def get_img_info(self, index):
         return {'height': 1, 'width': 1}
+
+class WeakImageNetValDataset(Dataset):
+    def __init__(self, transforms=None):
+        super().__init__()
+
+        self._ROOT = '/home/mtchiu/data/ILSVRC/ILSVRC2012'
+        self._ADDON_ROOT = '/home/mtchiu/data/ILSVRC_addon/ILSVRC2012'
+
+        self.transforms = transforms
+
+        with open(opj(self._ADDON_ROOT, 'nid_to_synset_id.json'), 'r') as f:
+            self.nid2sid = json.load(f)
+
+        with open(opj(self._ADDON_ROOT, '1000nids.json'), 'r') as f:
+            self.child_labels = json.load(f)
+
+        with open(opj(self._ADDON_ROOT, '40supernids.json'), 'r') as f:
+            self.super_labels = json.load(f)
+
+        with open(opj(self._ADDON_ROOT, 'seg_label_random10_si.json'), 'r') as f:
+            seg_maps = json.load(f)
+
+        self.imgs = sorted(glob(opj(self._ROOT, 'val', '*/*')))
+        self.locs = [None] * len(self.imgs)
+        self.nids = [None] * len(self.imgs)
+        for i in range(len(self.imgs)):
+            cls_name = self.imgs[i].split(os.sep)[-1]
+            xml_name = cls_name.replace('.JPEG', '.xml')
+            xml_path = opj(self._ADDON_ROOT, 'CLS-LOC', 'val', xml_name)
+
+            if os.path.isfile(xml_path):
+                with open(xml_path, 'r') as f:
+                    xml = xmltodict.parse(f.read())
+
+                h = int(xml['annotation']['size']['height'])
+                w = int(xml['annotation']['size']['width'])
+                self.locs[i] = {'filename': xml_name, 'size': (h, w), 'bboxes': []}
+
+                objects = xml['annotation']['object']
+                if not isinstance(objects, list):
+                    objects = [objects]
+                for obj in objects:
+                    bbox = np.array([
+                        float(obj['bndbox']['xmin']),
+                        float(obj['bndbox']['ymin']),
+                        float(obj['bndbox']['xmax']),
+                        float(obj['bndbox']['ymax'])
+                    ])
+                    self.locs[i]['bboxes'].append(bbox)
+        self.locs = np.array(self.locs)
+        self.nids = np.array(self.nids)
+
+        print('RSANet_ILSVRC Dataset - Val - loaded %d xmls' % np.sum(self.locs != None))
+
+    def __len__(self):
+        return len(self.imgs)
+
+    def __getitem__(self, index):
+        img = np.array(Image.open(self.imgs[index]).convert('RGB'))
+
+        nid = self.imgs[index].split(os.sep)[-2]
+
+        h, w = img.shape[:2]
+        ah, aw = self.locs[index]['size']
+        sh, sw = h/ah, w/aw
+
+        img = Image.fromarray(img)
+
+        box = []
+        for bbox in self.locs[index]['bboxes']:
+            bbox[[0,2]] *= sw
+            bbox[[1,3]] *= sh
+            bbox = bbox.astype(int)
+            box.append(bbox)
+
+        #Try out contiguous_id w/ bg
+        lbl = self.child_labels['nid_to_labelid'][nid] + 1
+        lbl = torch.tensor([lbl] * len(box))
+
+        boxlist = BoxList(box, img.size, mode='xyxy')
+        boxlist.add_field('labels', lbl)
+
+        if self.transforms is not None:
+            img, boxlist = self.transforms(img, boxlist)
+
+        return img, boxlist, index
+
+    def get_img_info(self, index):
+        return {'height': 1, 'width': 1}
+
+def WeakImageNetDataset(split, transforms=None):
+    if split == 'train':
+        return WeakImageNetTrainDataset(transforms)
+    else:
+        return WeakImageNetValDataset(transforms)

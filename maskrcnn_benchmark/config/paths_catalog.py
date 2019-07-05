@@ -7,13 +7,11 @@ import os
 class DatasetCatalog(object):
     DATA_DIR = "datasets"
     DATASETS = {
-        "ilsvrc_train": {
-            "img_dir": "ilsvrc/train",
-            "ann_file": "ilsvrc/train/annotation"
+        "ilsvrc_train": {  
+            "split": "train"
         },
         "ilsvrc_val": {
-            "img_dir": "ilsvrc/val",
-            "ann_file": "ilsvrc/val/annotation"
+            "split": "val"
         },
         "coco_2017_train": {
             "img_dir": "coco/train2017",
@@ -142,6 +140,7 @@ class DatasetCatalog(object):
             data_dir = DatasetCatalog.DATA_DIR
             attrs = DatasetCatalog.DATASETS[name]
             args = dict(
+                split=attrs["split"],
             )
             return dict(
                 factory="WeakImageNetDataset",
